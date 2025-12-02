@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HearBridge Web - Real-Time Transcription</title>
+    <style>
+        /* Base and Reset */
+        :root {
+            --bg-color-light: #f4f4f9;
+            --text-color-light: #1c1c1e;
+            --primary-color: #007AFF;
+            --accent-color: #FF9500;
+            --button-text-color: #ffffff;
+            --box-bg-color-light: #ffffff;
+            --highlight-color: #fce8a9; /* Light yellow background */
+        }
+
+        /* Dark Mode Variables */
+        body.dark-mode {
+            --bg-color-light: #1c1c1e;
+            --text-color-light: #f4f4f9;
+            --box-bg-color-light: #2c2c2e;
+            --highlight-color: #5d4a0a; /* Darker highlight */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color-light);
+            color: var(--text-color-light);
+            transition: background-color 0.3s, color 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Main Container for Responsiveness */
+        .app-container {
+            width: 95%;
+            max-width: 1000px;
+            padding: 20px;
+            margin: auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.8em;
+            color: var(--primary-color);
+        }
+
+        /* Transcription Box Styling */
+        #transcription-box {
+            background-color: var(--box-bg-color-light);
+            border: 2px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 350px;
+            max-height: 60vh;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        #transcription-text {
+            /* Initial font size, changeable by controls */
+            font-size: 24px; 
+            line-height: 1.6;
+            color: var(--text-color-light);
+            word-wrap: break-word;
+            white-space: pre-wrap; /* Maintains line breaks */
+            transition: font-size 0.2s;
+        }
+
+        /* Keyword Highlighting */
+        .highlight {
+            font-weight: bold;
+            color: var(--text-color-light);
+            background-color: var(--highlight-color);
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        /* Controls Layout */
+        .controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* Button Styling */
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s;
+            flex-grow: 1; /* Allows buttons to fill space */
+        }
+
+        .action-button {
+            background-color: var(--primary-color);
+            color: var(--button-text-color);
+            font-weight: bold;
+        }
+
+        .utility-button {
+            background-color: var(--box-bg-color-light);
+            color: var(--text-color-light);
+            border: 1px solid var(--text-color-light);
+            flex-grow: 0;
+            min-width: 50px;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Status and Help Text */
+        #status {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        #help-text {
+            font-size: 0.9em;
+            color: #6c757d;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* Mobile Adjustments (Optional: for smaller screens) */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+            }
+            #transcription-text {
+                font-size: 20px;
+            }
+            .controls-row {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>🎤 HearBridge Web</h1>
+            <p id="status">Ready</p>
+        </header>
+
+        <main>
+            <div id="transcription-box">
+                <div id="transcription-text">
+                    </div>
+            </div>
+
+            <div class="controls-row">
+                <button id="start-btn" class="action-button">Start Listening</button>
+                <button id="stop-btn" class="action-button" disabled>Stop</button>
+
+                <button id="clear-btn" class="utility-button">Clear Text</button>
+                <button id="font-increase-btn" class="utility-button">A+</button>
+                <button id="font-decrease-btn" class="utility-button">A–</button>
+                <button id="dark-mode-btn" class="utility-button">Toggle Dark Mode</button>
+            </div>
+            
+            <p id="help-text">
+                Click **Start**, speak near the device, and the text will appear above. Works best in Chrome/Edge browser.
+            </p>
+        </main>
+    </div>
+
+    <script>
+        // --- Core Variables and Elements ---
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const fontIncreaseBtn = document.getElementById('font-increase-btn');
+        const fontDecreaseBtn = document.getElementById('font-decrease-btn');
+        const darkModeBtn = document.getElementById('dark-mode-btn');
+        const transcriptionText = document.getElementById('transcription-text');
+        const statusEl = document.getElementById('status');
+        const bodyEl = document.body;
+
+        let recognition; // Holds the Web Speech API object
+        let isListening = false;
+        
+        // Keywords to highlight in the transcript
+        const HIGHLIGHT_KEYWORDS = [
+            "help", "stop", "careful", "fire", "wait", "danger", "look out"
+        ];
+        
+        // --- Utility Functions ---
+
+        /**
+         * @function updateStatus
+         * Updates the status message displayed to the user.
+         * @param {string} message - The status message.
+         */
+        function updateStatus(message) {
+            statusEl.textContent = message;
+        }
+
+        /**
+         * @function highlightKeywords
+         * Replaces keywords in the text with highlighted spans.
+         * @param {string} text - The input text.
+         * @returns {string} The text with keywords wrapped in <span> tags.
+         */
+        function highlightKeywords(text) {
+            let processedText = text;
+            HIGHLIGHT_KEYWORDS.forEach(keyword => {
+                // Use a regular expression with global and case-insensitive flags
+                const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+                processedText = processedText.replace(regex, match => 
+                    `<span class="highlight">${match}</span>`
+                );
+            });
+            return processedText;
+        }
+
+        // --- Web Speech API (Speech Recognition) Logic ---
+
+        // Check for browser compatibility
+        if ('webkitSpeechRecognition' in window) {
+            // Use webkitSpeechRecognition for better compatibility across major browsers
+            recognition = new webkitSpeechRecognition();
+        } else {
+            // If API is not supported, update status and disable buttons
+            updateStatus('ERROR: Speech Recognition is NOT supported in this browser.');
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+            console.error("Web Speech API not supported.");
+        }
+
+        if (recognition) {
+            // Do not stop listening after the user pauses or stops speaking.
+            recognition.continuous = true; 
+            // Return intermediate results for faster display.
+            recognition.interimResults = true; 
+            // Set language to English (change to 'es-ES' or 'fr-FR' as needed)
+            recognition.lang = 'en-US'; 
+            
+            /**
+             * @event onresult
+             * Fired when the speech recognition service returns a result.
+             * The transcription text is processed and displayed here.
+             */
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                
+                // Process all results from the event
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        // Final result: complete phrase.
+                        finalTranscript += transcript;
+                    } else {
+                        // Interim result: word-by-word progress.
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                // Add the new final transcript text, with highlighting
+                if (finalTranscript) {
+                    transcriptionText.innerHTML += highlightKeywords(finalTranscript) + '<br>';
+                }
+                
+                // Update the *last line* with the interim results for real-time feel
+                // This logic ensures interim text replaces the previous interim text
+                const currentText = transcriptionText.innerHTML;
+                const lines = currentText.split('<br>');
+                
+                // Remove the last (interim) line before adding the new interim line
+                lines.pop(); 
+                
+                // Append the updated lines back, including the current interim text
+                transcriptionText.innerHTML = lines.join('<br>') + '<br>' + highlightKeywords(interimTranscript);
+
+                // Scroll to the bottom of the transcription box
+                const box = document.getElementById('transcription-box');
+                box.scrollTop = box.scrollHeight;
+            };
+
+            /**
+             * @event onend
+             * Fired when the speech recognition service disconnects.
+             * This handles the continuous restart for long listening sessions.
+             */
+            recognition.onend = () => {
+                if (isListening) {
+                    // If the app is still supposed to be listening (not manually stopped), restart recognition
+                    recognition.start();
+                    console.log('Recognition restarted automatically.');
+                } else {
+                    updateStatus('Stopped');
+                }
+            };
+            
+            /**
+             * @event onerror
+             * Handles errors, especially permission denial.
+             */
+            recognition.onerror = (event) => {
+                console.error('Recognition error:', event.error);
+                if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                    // Critical error: Microphone access denied by user or system
+                    updateStatus('🔴 Microphone permission denied. Please check your browser settings.');
+                    startBtn.disabled = true;
+                } else {
+                    updateStatus('🔴 Listening Error: ' + event.error);
+                }
+                isListening = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            };
+        }
+
+        // --- Event Listeners for Controls ---
+
+        startBtn.addEventListener('click', () => {
+            if (recognition && !isListening) {
+                try {
+                    recognition.start();
+                    isListening = true;
+                    updateStatus('🟢 Listening...');
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                } catch (e) {
+                    // Handle cases where start() is called when already running (though onend should prevent this)
+                    if (e.name === 'InvalidStateError') {
+                        console.warn("Recognition already started or in transition.");
+                    } else {
+                        console.error("Failed to start recognition:", e);
+                    }
+                }
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (recognition && isListening) {
+                recognition.stop(); // Stops the recognition service
+                isListening = false;
+                updateStatus('Stopped');
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            transcriptionText.innerHTML = ''; // Clear all transcribed text
+        });
+
+        // Font Size Controls
+        fontIncreaseBtn.addEventListener('click', () => {
+            let currentSize = parseFloat(getComputedStyle(transcriptionText).fontSize);
+            if (currentSize < 48) { // Max font size limit
+                transcriptionText.style.fontSize = (currentSize + 2) + 'px';
+            }
+        });
+
+        fontDecreaseBtn.addEventListener('click', () => {
+            let currentSize = parseFloat(getComputedStyle(transcriptionText).fontSize);
+            if (currentSize > 16) { // Min font size limit
+                transcriptionText.style.fontSize = (currentSize - 2) + 'px';
+            }
+        });
+
+        // Dark Mode Toggle
+        darkModeBtn.addEventListener('click', () => {
+            bodyEl.classList.toggle('dark-mode');
+            const isDark = bodyEl.classList.contains('dark-mode');
+            // Save state to local storage to remember preference
+            localStorage.setItem('dark-mode', isDark ? 'enabled' : 'disabled');
+        });
+
+        // Load Dark Mode Preference on startup
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('dark-mode') === 'enabled') {
+                bodyEl.classList.add('dark-mode');
+            }
+        });
+    </script>
+</body>
+</html>
